@@ -7,6 +7,7 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
+import java.io.IOException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -27,7 +28,6 @@ public class ConversorApplication implements CommandLineRunner {
         "BRL", "Real brasileño",
         "COP", "Peso colombiano"
     ));
-    private final Map<String, Map<String, Double>> currencyRates = new HashMap<>();
     @Value("${exchangerate.api.url}")
     private String exchangeRateApiUrl = "<URL>";
 
@@ -37,8 +37,6 @@ public class ConversorApplication implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        loadRates();
-
         boolean repeat = true;
 
         while (repeat) {
@@ -84,32 +82,6 @@ public class ConversorApplication implements CommandLineRunner {
         }
     }
 
-    public void loadRates() {
-        HttpClient httpClient = HttpClient.newHttpClient();
-        ObjectMapper objectMapper = new ObjectMapper();
-
-        for (String currencyCode : currencyNames.keySet()) {
-            Map<String, Double> conversionRates = new HashMap<>();
-
-            HttpRequest httpRequest = HttpRequest.newBuilder()
-                .uri(java.net.URI.create(exchangeRateApiUrl + "/latest/" + currencyCode))
-                .build();
-
-            try {
-                HttpResponse<String> httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
-                JsonNode jsonNode = objectMapper.readTree(httpResponse.body());
-
-                jsonNode.get("conversion_rates").fields().forEachRemaining(entry -> {
-                    conversionRates.put(entry.getKey(), entry.getValue().asDouble());
-                });
-            } catch (Exception e) {
-                throw new RuntimeException("No pudo cargar la información de la moneda: " + currencyCode, e);
-            }
-
-            currencyRates.put(currencyCode, conversionRates);
-        }
-    }
-
     public int readInt(String message) {
         int value = 0;
         boolean valid = false;
@@ -148,24 +120,20 @@ public class ConversorApplication implements CommandLineRunner {
         return value;
     }
 
-    public void convertCurrency(String fromCurrencyCode, String toCurrencyCode) {
+    public void convertCurrency(String fromCurrencyCode, String toCurrencyCode) throws IOException, InterruptedException {
         String fromCurrencyName = currencyNames.get(fromCurrencyCode);
         String toCurrencyName = currencyNames.get(toCurrencyCode);
-
-        Map<String, Double> conversionRates = currencyRates.get(fromCurrencyCode);
-        if (conversionRates == null) {
-            System.out.printf("No tenemos registrada la moneda %s%n", fromCurrencyName);
-            return;
-        }
-
-        Double conversionRate = conversionRates.get(toCurrencyCode);
-        if (conversionRate == null) {
-            System.out.printf("No tenemos registrada la conversión de %s a %s%n", fromCurrencyName, toCurrencyName);
-            return;
-        }
-
         double value = readDouble("Ingrese el valor a convertir: ");
-        double convertedValue = value * conversionRate;
+
+        HttpClient httpClient = HttpClient.newHttpClient();
+        ObjectMapper objectMapper = new ObjectMapper();
+        HttpRequest httpRequest = HttpRequest.newBuilder()
+                .uri(java.net.URI.create(exchangeRateApiUrl + "/pair/" + fromCurrencyCode + "/" + toCurrencyCode + "/" + value))
+                .build();
+        HttpResponse<String> httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+        JsonNode jsonNode = objectMapper.readTree(httpResponse.body());
+
+        double convertedValue = jsonNode.get("conversion_result").doubleValue();
 
         System.out.printf("%.2f %s = %.2f %s%n", value, fromCurrencyName, convertedValue, toCurrencyName);
     }
