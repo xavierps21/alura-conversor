@@ -160,7 +160,7 @@ public class ConversorApplication implements CommandLineRunner {
 
         Double conversionRate = conversionRates.get(toCurrencyCode);
         if (conversionRate == null) {
-            System.out.printf("No tenemos registrada la moneda la conversión de %s a %s%n", fromCurrencyName, toCurrencyName);
+            System.out.printf("No tenemos registrada la conversión de %s a %s%n", fromCurrencyName, toCurrencyName);
             return;
         }
 
